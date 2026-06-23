@@ -1,8 +1,6 @@
-import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { isSupabaseConfigured } from '@/config/env';
-import { FILTERED_TASKS_KEY } from '@/hooks/useFilteredTasks';
-import { performSync } from '@/services/syncOrchestrator';
+import { pushTaskDelete, pushTaskUpsert } from '@/services/inlineSync';
 import { taskService } from '@/services/taskService';
 import { useTaskStore } from '@/store/taskStore';
 import type { TaskInput } from '@/types/task';
@@ -18,13 +16,6 @@ export const useTaskMutations = () => {
   const deleteTask = useTaskStore(state => state.deleteTask);
   const toggleComplete = useTaskStore(state => state.toggleComplete);
 
-  const syncAfterMutation = useCallback(async () => {
-    if (isOnline && isSupabaseConfigured()) {
-      await performSync(queryClient);
-      await queryClient.invalidateQueries({ queryKey: [FILTERED_TASKS_KEY] });
-    }
-  }, [isOnline, queryClient]);
-
   const fetchMutation = useMutation({
     mutationFn: taskService.fetchAll,
     onSuccess: remoteTasks => {
@@ -37,12 +28,10 @@ export const useTaskMutations = () => {
     mutationFn: async (input: TaskInput) => {
       const task = createTask(input);
       if (isOnline && isSupabaseConfigured()) {
-        await taskService.upsert(task);
-        useTaskStore.getState().markTasksSynced([task.id]);
+        pushTaskUpsert(task, queryClient);
       }
       return task;
     },
-    onSettled: syncAfterMutation,
   });
 
   const updateMutation = useMutation({
@@ -58,12 +47,10 @@ export const useTaskMutations = () => {
         throw new Error('Task not found');
       }
       if (isOnline && isSupabaseConfigured()) {
-        await taskService.upsert(task);
-        useTaskStore.getState().markTasksSynced([task.id]);
+        pushTaskUpsert(task, queryClient);
       }
       return task;
     },
-    onSettled: syncAfterMutation,
   });
 
   const deleteMutation = useMutation({
@@ -71,11 +58,9 @@ export const useTaskMutations = () => {
       deleteTask(id);
       const task = useTaskStore.getState().tasks.find(item => item.id === id);
       if (task && isOnline && isSupabaseConfigured()) {
-        await taskService.softDelete(task);
-        useTaskStore.getState().removeDeletedTasks([id]);
+        pushTaskDelete(task);
       }
     },
-    onSettled: syncAfterMutation,
   });
 
   const toggleMutation = useMutation({
@@ -85,12 +70,10 @@ export const useTaskMutations = () => {
         throw new Error('Task not found');
       }
       if (isOnline && isSupabaseConfigured()) {
-        await taskService.upsert(task);
-        useTaskStore.getState().markTasksSynced([task.id]);
+        pushTaskUpsert(task, queryClient);
       }
       return task;
     },
-    onSettled: syncAfterMutation,
   });
 
   return {

@@ -5,6 +5,7 @@ import type { RootStackParamList } from '@/types/navigation';
 import type { TaskFormValues } from '@/utils/validation';
 import { colors } from '@/theme';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
+import { dismissKeyboardAndWait } from '@/utils/keyboard';
 import { TaskForm } from '@/components/tasks/TaskForm';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateTask'>;
@@ -14,6 +15,7 @@ export function CreateTaskScreen({ navigation }: Props) {
 
   const handleSubmit = useCallback(
     async (values: TaskFormValues) => {
+      await dismissKeyboardAndWait();
       try {
         await createMutation.mutateAsync(values);
         navigation.goBack();

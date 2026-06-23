@@ -135,7 +135,7 @@ export const TaskActionMenu = memo(function TaskActionMenu({
     opacity: backdropOpacity.value,
   }));
 
-  if (!task) {
+  if (!visible || !task) {
     return null;
   }
 
@@ -143,7 +143,7 @@ export const TaskActionMenu = memo(function TaskActionMenu({
     <Modal
       animationType="none"
       transparent
-      visible={visible}
+      visible
       onShow={handleShow}
       onRequestClose={handleDismiss}
       statusBarTranslucent>

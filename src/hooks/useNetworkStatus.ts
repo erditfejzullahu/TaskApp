@@ -7,7 +7,9 @@ export const useNetworkStatus = () => {
 
   useEffect(() => {
     const handleChange = (state: NetInfoState) => {
-      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      // isInternetReachable flickers during active HTTP requests (e.g. Supabase
+      // upsert) and toggles queries on/off, leaving the UI in a stuck state.
+      const online = Boolean(state.isConnected);
       setIsOnline(online);
       setIsReady(true);
     };

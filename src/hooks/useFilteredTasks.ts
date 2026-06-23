@@ -1,18 +1,17 @@
-import { useMemo } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { isSupabaseConfigured } from '@/config/env';
 import { taskService } from '@/services/taskService';
+import { useTaskStore } from '@/store/taskStore';
 import type { CompletionFilter, Task } from '@/types/task';
-import {
-  applyClientTaskFilters,
-  mergeServerTasksWithLocalUnsynced,
-} from '@/utils/taskFilters';
+import { applyClientTaskFilters } from '@/utils/taskFilters';
 import { useDebounce, useDebouncedLoading } from './useDebounce';
 import { useNetworkStatus } from './useNetworkStatus';
 
-const FILTERED_TASKS_KEY = 'tasks-filtered';
+export const FILTERED_TASKS_KEY = 'tasks-filtered';
 
-// This hook is used to fetch the filtered tasks from the server -> if online request the server, if offline use the local tasks.
+// List always renders from the local store (instant, survives mutations).
+// Debounced search/filter fires a server request that merges into the store.
 export const useFilteredTasks = (
   localTasks: Task[],
   searchQuery: string,
@@ -35,52 +34,34 @@ export const useFilteredTasks = (
         filter: debouncedFilter,
       }),
     enabled: useServer,
-    staleTime: 15_000,
-    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
-  const clientPreview = useMemo(
-    () =>
-      applyClientTaskFilters(localTasks, debouncedSearch, debouncedFilter),
-    [localTasks, debouncedSearch, debouncedFilter],
+  const lastMergedRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (
+      !serverQuery.isFetched ||
+      serverQuery.isFetching ||
+      !serverQuery.data ||
+      serverQuery.data === lastMergedRef.current
+    ) {
+      return;
+    }
+    lastMergedRef.current = serverQuery.data;
+    useTaskStore.getState().mergeRemoteTasks(serverQuery.data);
+  }, [serverQuery.isFetched, serverQuery.isFetching, serverQuery.data]);
+
+  const tasks = useMemo(
+    () => applyClientTaskFilters(localTasks, searchQuery, filter),
+    [localTasks, searchQuery, filter],
   );
 
-  const tasks = useMemo(() => {
-    if (!useServer) {
-      return clientPreview;
-    }
-
-    // While the server request is in flight, keep showing local preview
-    if (serverQuery.isFetching || serverQuery.isLoading) {
-      return clientPreview;
-    }
-
-    if (serverQuery.data === undefined) {
-      return clientPreview;
-    }
-
-    return mergeServerTasksWithLocalUnsynced(
-      serverQuery.data,
-      localTasks,
-      debouncedSearch,
-      debouncedFilter,
-    );
-  }, [
-    useServer,
-    clientPreview,
-    localTasks,
-    serverQuery.data,
-    serverQuery.isFetching,
-    serverQuery.isLoading,
-    debouncedSearch,
-    debouncedFilter,
-  ]);
-
-  const isProcessing =
-    isSearching ||
-    isFiltering ||
-    (useServer && serverQuery.isFetching);
-
+  const isProcessing = isSearching || isFiltering;
   const showEmptyState = !isProcessing && tasks.length === 0;
 
   return useMemo(
@@ -94,7 +75,6 @@ export const useFilteredTasks = (
       isError: useServer && serverQuery.isError,
       error: serverQuery.error,
       refetch: serverQuery.refetch,
-      isRefetching: useServer && serverQuery.isRefetching,
     }),
     [
       tasks,
@@ -106,9 +86,6 @@ export const useFilteredTasks = (
       serverQuery.isError,
       serverQuery.error,
       serverQuery.refetch,
-      serverQuery.isRefetching,
     ],
   );
 };
-
-export { FILTERED_TASKS_KEY };

@@ -91,6 +91,7 @@ export const TaskList = memo(function TaskList({
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
       keyboardShouldPersistTaps="handled"
+      extraData={tasks}
       initialNumToRender={10}
       maxToRenderPerBatch={8}
       windowSize={7}

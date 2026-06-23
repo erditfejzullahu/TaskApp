@@ -64,7 +64,7 @@ export const TaskDetailModal = memo(function TaskDetailModal({
   onClose,
   onEdit,
 }: TaskDetailModalProps) {
-  if (!task) {
+  if (!visible || !task) {
     return null;
   }
 
@@ -72,7 +72,7 @@ export const TaskDetailModal = memo(function TaskDetailModal({
     <Modal
       animationType="slide"
       presentationStyle="pageSheet"
-      visible={visible}
+      visible
       onRequestClose={onClose}>
       <View style={styles.container}>
 

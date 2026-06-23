@@ -1,5 +1,7 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/types/navigation';
 import type { CompletionFilter, Task } from '@/types/task';
@@ -57,13 +59,15 @@ export function TasksScreen({ navigation }: Props) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [listKey, setListKey] = useState(0);
 
   const { tasks, unsyncedCount } = useTasks();
   const {
     tasks: filteredTasks,
     isProcessing,
     showEmptyState,
-    isRefetching: isFilterRefetching,
+    refetch: refetchFiltered,
   } = useFilteredTasks(tasks, searchQuery, filter);
   const { toggleMutation, deleteMutation } = useTaskMutations();
   const { isOnline } = useNetworkStatus();
@@ -77,23 +81,50 @@ export function TasksScreen({ navigation }: Props) {
     syncNow,
     isSyncing,
     refetchTasks,
-    isRefetching,
   } = useAppBootstrap();
 
-  const syncModalVisible = useSyncStore(state => state.syncModalVisible);
-  const syncItems = useSyncStore(state => state.syncItems);
-  const toastVisible = useSyncStore(state => state.toastVisible);
-  const toastType = useSyncStore(state => state.toastType);
-  const toastMessage = useSyncStore(state => state.toastMessage);
-  const hideToast = useSyncStore(state => state.hideToast);
+  // After returning from create/edit the native Modal layer or keyboard resize
+  // can leave touch targets misaligned until a full remount — search "fixed" it
+  // because it forced this same reset path.
+  useFocusEffect(
+    useCallback(() => {
+      Keyboard.dismiss();
+      setDetailVisible(false);
+      setMenuVisible(false);
+      setListKey(k => k + 1);
+    }, []),
+  );
 
-  const selectedTask: Task | null = useMemo(
+  // Single subscription for all sync UI state
+  const { syncModalVisible, syncItems, toastVisible, toastType, toastMessage, hideToast } =
+    useSyncStore(
+      useShallow(state => ({
+        syncModalVisible: state.syncModalVisible,
+        syncItems: state.syncItems,
+        toastVisible: state.toastVisible,
+        toastType: state.toastType,
+        toastMessage: state.toastMessage,
+        hideToast: state.hideToast,
+      })),
+    );
+
+  const computedTask: Task | null = useMemo(
     () =>
       filteredTasks.find(t => t.id === selectedTaskId) ??
       tasks.find(t => t.id === selectedTaskId) ??
       null,
     [filteredTasks, tasks, selectedTaskId],
   );
+
+  // Keep the last non-null task in a ref so modals don't unmount mid-interaction
+  // when a store merge briefly causes selectedTask to resolve to null.
+  const selectedTaskRef = useRef<Task | null>(null);
+  if (computedTask) {
+    selectedTaskRef.current = computedTask;
+  }
+  const selectedTask = detailVisible || menuVisible
+    ? (computedTask ?? selectedTaskRef.current)
+    : computedTask;
 
   const handleCreateTask = useCallback(
     () => navigation.navigate('CreateTask'),
@@ -167,6 +198,18 @@ export function TasksScreen({ navigation }: Props) {
     setMenuVisible(false);
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetchTasks();
+      if (isOnline) {
+        await refetchFiltered();
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetchTasks, refetchFiltered, isOnline]);
+
   const emptyCopy = useMemo(() => {
     if (searchQuery.trim()) {
       return {
@@ -216,6 +259,7 @@ export function TasksScreen({ navigation }: Props) {
       ) : null}
 
       <TaskList
+        key={listKey}
         tasks={filteredTasks}
         onPressTask={handlePressTask}
         onMenuPressTask={handleMenuPress}
@@ -224,8 +268,8 @@ export function TasksScreen({ navigation }: Props) {
         emptyTitle={emptyCopy?.title}
         emptyDescription={emptyCopy?.description}
         showEmptyState={showEmptyState}
-        refreshing={isRefetching || isFilterRefetching}
-        onRefresh={isOnline ? refetchTasks : undefined}
+        refreshing={isRefreshing}
+        onRefresh={isOnline ? handleRefresh : undefined}
       />
 
       {/* Task detail modal */}

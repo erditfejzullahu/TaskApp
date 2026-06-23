@@ -6,6 +6,7 @@ import type { TaskFormValues } from '@/utils/validation';
 import { colors } from '@/theme';
 import { useTaskStore } from '@/store/taskStore';
 import { useTaskMutations } from '@/hooks/useTaskMutations';
+import { dismissKeyboardAndWait } from '@/utils/keyboard';
 import { TaskForm } from '@/components/tasks/TaskForm';
 import { ErrorState } from '@/components/common/ErrorState';
 
@@ -29,6 +30,7 @@ export function UpdateTaskScreen({ navigation, route }: Props) {
 
   const handleSubmit = useCallback(
     async (values: TaskFormValues) => {
+      await dismissKeyboardAndWait();
       try {
         await updateMutation.mutateAsync({ id: taskId, input: values });
         navigation.goBack();
