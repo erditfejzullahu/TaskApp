@@ -27,7 +27,8 @@ DerivedData
 build/
 .idea
 .gradle
-local.properties
+
+# local.properties -> included in the repo for fast setup. -> see README.md for more details. -> need to be pointed correctly to the sdk directory.
 *.iml
 *.hprof
 .cxx/
