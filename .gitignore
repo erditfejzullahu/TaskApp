@@ -35,6 +35,10 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Environment (secrets) -> included in the repo for fast setup.
+# .env
+# .env.local
+
 # node.js
 #
 node_modules/
